@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kripto Haber ve Analiz Sistemi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .coin-select {
+            margin-bottom: 20px;
+        }
+        .coin-select select {
+            padding: 10px;
+            font-size: 16px;
+            width: 250px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .result-item {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .result-item p {
+            margin: 0;
+        }
+        .buy {
+            color: green;
+            font-weight: bold;
+        }
+        .sell {
+            color: red;
+            font-weight: bold;
+        }
+        .neutral {
+            color: gray;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Kripto Haber ve Analiz Sistemi</h1>
+    <div class="coin-select">
+        <label for="coinSelect">Coin Seçin:</label>
+        <select id="coinSelect">
+            <!-- Bu listeyi CoinGecko API'den alacağız -->
+        </select>
+        <button onclick="getCoinData()">Analiz Yap</button>
+    </div>
+
+    <div class="results" id="results">
+        <!-- Sonuçlar burada görüntülenecek -->
+    </div>
+</div>
+
+<script>
+    const newsApiKey = 'c73a9e3d659247ea9bbd0f3cb5053b64'; // Haber API Anahtarı
+    let lastUpdated = null;
+
+    // CoinGecko API ile tüm coinleri al ve USDT pariteleri olanları filtrele
+    async function loadCoins() {
+        const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd'; // Bütün coinleri al
+        const response = await fetch(url);
+        const coins = await response.json();
+
+        const coinSelect = document.getElementById('coinSelect');
+        coins.forEach(coin => {
+            const option = document.createElement('option');
+            option.value = coin.id;
+            option.textContent = `${coin.name} (${coin.symbol.toUpperCase()})`;
+            coinSelect.appendChild(option);
+        });
+    }
+
+    // Coin seçildikten sonra veri alıp analiz yap
+    async function getCoinData() {
+        const coinSymbol = document.getElementById('coinSelect').value;
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinSymbol}&vs_currencies=usd`;
+
+        const response = await fetch(url);
+        const coinData = await response.json();
+        const coinPrice = coinData[coinSymbol].usd;
+
+        // Haber API'den tüm haberleri çekiyoruz
+        const newsResponse = await fetch(`https://newsapi.org/v2/everything?q=${coinSymbol}&apiKey=${newsApiKey}`);
+        const newsData = await newsResponse.json();
+
+        displayResults(coinSymbol, coinPrice, newsData);
+    }
+
+    // Sonuçları görüntülemek için fonksiyon
+    function displayResults(coinSymbol, coinPrice, newsData) {
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = ''; // Eski sonuçları temizle
+
+        const coinHeader = document.createElement('h2');
+        coinHeader.textContent = `${coinSymbol.toUpperCase()} Fiyatı: $${coinPrice}`;
+        resultsDiv.appendChild(coinHeader);
+
+        // Alım/Satım sinyali özetini hesaplayalım
+        let buyCount = 0;
+        let sellCount = 0;
+        let neutralCount = 0;
+
+        // En önemli 10 haberi analiz edelim
+        const topNews = newsData.articles.slice(0, 10); // İlk 10 haber
+        topNews.forEach(article => {
+            // Alım/Satım sinyalini çıkar
+            const signal = analyzeNews(article.title);
+            if (signal === 'Buy') {
+                buyCount++;
+            } else if (signal === 'Sell') {
+                sellCount++;
+            } else {
+                neutralCount++;
+            }
+        });
+
+        // Sonuçları kullanıcıya göster
+        resultsDiv.innerHTML += `<p><strong>Alım Sinyali (Buy):</strong> ${buyCount} haber</p>`;
+        resultsDiv.innerHTML += `<p><strong>Satım Sinyali (Sell):</strong> ${sellCount} haber</p>`;
+        resultsDiv.innerHTML += `<p><strong>Nötr (Neutral):</strong> ${neutralCount} haber</p>`;
+    }
+
+    // Haber başlığına göre sinyal analizini yap
+    function analyzeNews(title) {
+        const positiveKeywords = ['growth', 'surge', 'profit', 'increase', 'bullish'];
+        const negativeKeywords = ['decline', 'drop', 'loss', 'fall', 'bearish'];
+
+        if (positiveKeywords.some(keyword => title.toLowerCase().includes(keyword))) {
+            return 'Buy'; // Alım sinyali
+        } else if (negativeKeywords.some(keyword => title.toLowerCase().includes(keyword))) {
+            return 'Sell'; // Satım sinyali
+        } else {
+            return 'Neutral'; // Neutrel sinyal
+        }
+    }
+
+    // Coinleri sürekli olarak güncellemek için fonksiyon
+    function autoUpdate() {
+        const coinSymbol = document.getElementById('coinSelect').value;
+        const currentTime = new Date().getTime();
+
+        // Eğer son güncelleme 1 dakikadan daha eskiyse verileri yenileyin
+        if (lastUpdated === null || currentTime - lastUpdated > 60000) {
+            getCoinData(); // Yeni verileri al
+            lastUpdated = currentTime;
+        }
+    }
+
+    // Sayfa yüklendiğinde coinleri yükle ve 60 saniye arayla verileri yenile
+    loadCoins();
+    setInterval(autoUpdate, 60000); // 1 dakika arayla güncelleme
+</script>
+
+</body>
+</html>
+
+
+
+
+http://localhost:63343/seko/emre.html?_ijt=le0h6jtapg62lqbtn8dutv7o4f&_ij_reload=RELOAD_ON_SAVE
